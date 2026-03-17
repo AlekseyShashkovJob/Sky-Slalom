@@ -32,15 +32,17 @@ namespace GameCore
 
         public bool IsBoosted { get; private set; } = false;
 
-        // Общий флаг: идёт переход между сценами (рестарт/в меню)
+        public bool IsGameActive { get; private set; } = false;
         public bool IsSceneChanging { get; private set; } = false;
 
         [SerializeField] private View.UIScreen _winScreen;
+        [SerializeField] private View.UIScreen _tutorialScreen;
         [SerializeField] private Misc.SceneManagment.SceneLoader _sceneLoader;
         [SerializeField] private TMP_Text _scoreText;
         [SerializeField] private TMP_Text _coinsText;
 
-        private readonly List<Objects.GameplayObjectMovement> _activeMovers = new List<Objects.GameplayObjectMovement>();
+        private readonly List<Objects.GameplayObjectMovement> _activeMovers
+            = new List<Objects.GameplayObjectMovement>();
 
         private void Awake()
         {
@@ -62,10 +64,16 @@ namespace GameCore
         private void Start()
         {
             IsSceneChanging = false;
-            Time.timeScale = 1.0f;
+
+            IsGameActive = false;
+            CurrentScore = 0;
+
+            Time.timeScale = 0.0f;
 
             UpdateScoreUI();
             OnBoostStateChanged += HandleBoostStateChanged;
+
+            _tutorialScreen.StartScreen();
         }
 
         private void OnDestroy()
@@ -77,22 +85,28 @@ namespace GameCore
 
         private void Update()
         {
-            if (IsSceneChanging) return;
+            if (IsSceneChanging || !IsGameActive) return;
 
-            // Буст по нажатию пробела (toggle)
             if (Input.GetKeyDown(KeyCode.Space))
                 ToggleBoost();
         }
 
+        public void StartGameFromTutorial()
+        {
+            _tutorialScreen.CloseScreen();
+
+            IsGameActive = true;
+            Time.timeScale = 1.0f;
+        }
+
         internal void ToggleBoost()
         {
-            if (IsSceneChanging) return;
+            if (IsSceneChanging || !IsGameActive) return;
 
             IsBoosted = !IsBoosted;
             OnBoostStateChanged?.Invoke(IsBoosted);
         }
 
-        // Совместимость со старым вызовом (теперь тоже toggle)
         internal void BoostObjectsSpeed()
         {
             ToggleBoost();
@@ -100,7 +114,7 @@ namespace GameCore
 
         internal void AddScore(int amount)
         {
-            if (IsSceneChanging) return;
+            if (IsSceneChanging || !IsGameActive) return;
 
             CurrentScore += amount;
             UpdateScoreUI();
@@ -108,7 +122,7 @@ namespace GameCore
 
         internal void AddCoins()
         {
-            if (IsSceneChanging) return;
+            if (IsSceneChanging || !IsGameActive) return;
 
             CurrentCoins++;
             SaveData();
@@ -120,11 +134,10 @@ namespace GameCore
             if (IsSceneChanging) return;
 
             IsSceneChanging = true;
+            IsGameActive = false;
             SaveData();
 
-            // важно: разморозить время, чтобы SceneLoader не завис на паузе
             Time.timeScale = 1.0f;
-
             _sceneLoader.ChangeScene(Misc.Data.SceneConstants.GAME_SCENE);
         }
 
@@ -133,19 +146,18 @@ namespace GameCore
             if (IsSceneChanging) return;
 
             IsSceneChanging = true;
+            IsGameActive = false;
             SaveData();
 
-            // важно: разморозить время, чтобы SceneLoader не завис на паузе
             Time.timeScale = 1.0f;
-
             _sceneLoader.ChangeScene(Misc.Data.SceneConstants.MENU_SCENE);
         }
 
         internal void FinishGame()
         {
-            // Если уже уходим со сцены (рестарт/в меню) — игнорируем финиш
-            if (IsSceneChanging) return;
+            if (IsSceneChanging || !IsGameActive) return;
 
+            IsGameActive = false;
             Time.timeScale = 0.0f;
 
             TotalScore += CurrentScore;
@@ -187,7 +199,6 @@ namespace GameCore
             if (!_activeMovers.Contains(mover))
                 _activeMovers.Add(mover);
 
-            // Сразу применяем актуальную скорость
             mover.Speed = IsBoosted ? BoostedObjectSpeed : BaseObjectSpeed;
         }
 
